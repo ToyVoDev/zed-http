@@ -1,3 +1,8 @@
-/target
+target/
 *.wasm
 grammars/
+
+# nested Cargo.lock files created when cargo is run from a subdirectory
+# before the workspace was set up — the workspace uses the root Cargo.lock
+http-lsp/Cargo.lock
+httpyac-rs/Cargo.lock

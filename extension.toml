@@ -10,3 +10,7 @@ repository = "https://github.com/tie304/zed-http"
 [grammars.http]
 repository = "https://github.com/ToyVoDev/tree-sitter-http"
 commit = "07612be7657611df0ddbefaff0e1f48f6cfd006c"
+
+[language_servers.zed-http-lsp]
+name = "zed-http-lsp"
+languages = ["http"]

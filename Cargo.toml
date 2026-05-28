@@ -1,10 +1,17 @@
+[workspace]
+members = ["http-lsp", "httpyac-rs"]
+# Zed invokes `cargo build --target wasm32-wasip2` from this directory; the
+# default-members set keeps that targeting the root extension crate only, so
+# the native http-lsp / httpyac-rs members don't try to cross-compile to wasm.
+default-members = ["."]
+resolver = "2"
+
 [package]
 name = "zed_http"
 version = "0.1.0"
 edition = "2021"
 publish = false
 license = "Apache-2.0"
-
 
 [lib]
 path = "src/http.rs"
@@ -13,3 +20,9 @@ crate-type = ["cdylib"]
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 zed_extension_api = "0.0.6"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = "symbols"

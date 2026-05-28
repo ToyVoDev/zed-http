@@ -1,5 +1,5 @@
 {
-  description = "Zed extension for .http files";
+  description = "Zed extension for .http files (with httpyac-backed LSP)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -28,18 +28,57 @@
           rust = pkgsWithRust.rust-bin.stable.latest.default.override {
             targets = [ "wasm32-wasip2" "wasm32-wasip1" "wasm32-unknown-unknown" ];
           };
+          rustPlatform = pkgsWithRust.makeRustPlatform {
+            cargo = rust;
+            rustc = rust;
+          };
+          cargoToml = builtins.fromTOML (builtins.readFile ./http-lsp/Cargo.toml);
+
+          zed-http-lsp = rustPlatform.buildRustPackage {
+            pname = "zed-http-lsp";
+            version = cargoToml.package.version;
+
+            src = pkgs.lib.cleanSourceWith {
+              src = ./.;
+              filter = path: type:
+                let
+                  rel = pkgs.lib.removePrefix (toString ./. + "/") (toString path);
+                in
+                !(pkgs.lib.hasPrefix "target" rel
+                  || pkgs.lib.hasPrefix "grammars" rel
+                  || pkgs.lib.hasSuffix ".wasm" rel
+                  || pkgs.lib.hasPrefix ".direnv" rel);
+            };
+
+            cargoLock.lockFile = ./Cargo.lock;
+            cargoBuildFlags = [ "-p" "zed-http-lsp" ];
+            cargoTestFlags = [ "-p" "zed-http-lsp" "-p" "httpyac-rs" ];
+
+            meta = with pkgs.lib; {
+              description = "LSP for .http files that delegates execution to httpyac";
+              homepage = "https://github.com/ToyVoDev/zed-http";
+              license = licenses.asl20;
+              mainProgram = "zed-http-lsp";
+            };
+          };
         in
         {
+          packages = {
+            inherit zed-http-lsp;
+            default = zed-http-lsp;
+          };
+
           devShells.default = pkgsWithRust.mkShell {
             packages = [
               rust
               pkgs.tree-sitter
               pkgs.nodejs
               pkgs.clang
+              pkgs.httpyac
             ];
 
             shellHook = ''
-              echo "zed-http dev shell — rust $(rustc --version | cut -d' ' -f2), tree-sitter $(tree-sitter --version | cut -d' ' -f2)"
+              echo "zed-http dev shell — rust $(rustc --version | cut -d' ' -f2), tree-sitter $(tree-sitter --version | cut -d' ' -f2), httpyac $(httpyac --version 2>/dev/null || echo missing)"
             '';
           };
 
