@@ -72,12 +72,9 @@ impl Backend {
         self.config.read().await.binary().to_string()
     }
 
-    fn enclosing_request(&self, uri: &Url, line: u32) -> Option<(Request, u32)> {
+    fn enclosing_request(&self, uri: &Url, line: u32) -> Option<Request> {
         let reqs = self.requests.get(uri)?;
-        let text = self.documents.get(uri)?;
-        let total = text.lines().count() as u32;
-        let r = request_index::request_at_line(&reqs, line, total)?.clone();
-        Some((r, total))
+        request_index::request_at_line(&reqs, line).cloned()
     }
 }
 
@@ -183,7 +180,7 @@ impl LanguageServer for Backend {
     ) -> LspResult<Option<CodeActionResponse>> {
         let uri = params.text_document.uri;
         let line = params.range.start.line;
-        let Some((req, _total)) = self.enclosing_request(&uri, line) else {
+        let Some(req) = self.enclosing_request(&uri, line) else {
             return Ok(None);
         };
 
@@ -209,7 +206,7 @@ impl LanguageServer for Backend {
     async fn hover(&self, params: HoverParams) -> LspResult<Option<Hover>> {
         let uri = params.text_document_position_params.text_document.uri;
         let line = params.text_document_position_params.position.line;
-        let Some((req, _)) = self.enclosing_request(&uri, line) else {
+        let Some(req) = self.enclosing_request(&uri, line) else {
             return Ok(None);
         };
 
@@ -346,35 +343,25 @@ impl Backend {
         let target = parent.join(format!("{base}-line{line}-{ts}.resp"));
         let body = response_format::format(&cached.exchange, View::Full);
 
-        if let Err(e) = tokio::fs::write(&target, body).await {
+        let Ok(target_uri) = Url::from_file_path(&target) else {
+            return;
+        };
+        if let Err(e) = self.write_and_open(target_uri, &body).await {
             self.client
                 .show_message(MessageType::ERROR, format!("zed-http: save failed: {e}"))
-                .await;
-            return;
-        }
-
-        if let Ok(target_uri) = Url::from_file_path(&target) {
-            let _ = self
-                .client
-                .show_document(ShowDocumentParams {
-                    uri: target_uri,
-                    external: Some(false),
-                    take_focus: Some(true),
-                    selection: None,
-                })
                 .await;
         }
     }
 
     async fn open_response(&self, uri: &Url, line: u32, exchange: &Exchange, view: View) {
         let body = response_format::format(exchange, view);
-        let path = match write_temp(uri, line, &body).await {
+        let path = match temp_response_path(uri, line).await {
             Ok(p) => p,
             Err(e) => {
                 self.client
                     .show_message(
                         MessageType::ERROR,
-                        format!("zed-http: failed to write response temp file: {e}"),
+                        format!("zed-http: failed to allocate response temp file: {e}"),
                     )
                     .await;
                 return;
@@ -382,16 +369,65 @@ impl Backend {
         };
         self.cache.attach_temp_path(uri, line, path.clone());
 
-        if let Ok(target_uri) = Url::from_file_path(&path) {
-            let _ = self
-                .client
-                .show_document(ShowDocumentParams {
-                    uri: target_uri,
-                    external: Some(false),
-                    take_focus: Some(true),
-                    selection: None,
-                })
+        let Ok(target_uri) = Url::from_file_path(&path) else {
+            return;
+        };
+        if let Err(e) = self.write_and_open(target_uri, &body).await {
+            self.client
+                .show_message(
+                    MessageType::ERROR,
+                    format!("zed-http: failed to display response: {e}"),
+                )
                 .await;
+        }
+    }
+
+    /// Create the file at `target_uri` and populate it with `body` via a single
+    /// `workspace/applyEdit` — Zed's editor reacts to the resulting
+    /// `WorkspaceEditApplied` event by opening hidden buffers, so the new
+    /// response file shows up in a fresh pane without us needing
+    /// `window/showDocument` (which Zed doesn't implement).
+    async fn write_and_open(&self, target_uri: Url, body: &str) -> Result<(), String> {
+        if let Some(parent) = target_uri.to_file_path().ok().and_then(|p| p.parent().map(|p| p.to_path_buf())) {
+            if let Err(e) = tokio::fs::create_dir_all(&parent).await {
+                return Err(e.to_string());
+            }
+        }
+
+        let edit = WorkspaceEdit {
+            document_changes: Some(DocumentChanges::Operations(vec![
+                DocumentChangeOperation::Op(ResourceOp::Create(CreateFile {
+                    uri: target_uri.clone(),
+                    options: Some(CreateFileOptions {
+                        overwrite: Some(true),
+                        ignore_if_exists: None,
+                    }),
+                    annotation_id: None,
+                })),
+                DocumentChangeOperation::Edit(TextDocumentEdit {
+                    text_document: OptionalVersionedTextDocumentIdentifier {
+                        uri: target_uri,
+                        version: None,
+                    },
+                    edits: vec![OneOf::Left(TextEdit {
+                        range: Range {
+                            start: Position { line: 0, character: 0 },
+                            end: Position { line: 0, character: 0 },
+                        },
+                        new_text: body.to_string(),
+                    })],
+                }),
+            ])),
+            changes: None,
+            change_annotations: None,
+        };
+
+        match self.client.apply_edit(edit).await {
+            Ok(resp) if resp.applied => Ok(()),
+            Ok(resp) => Err(resp
+                .failure_reason
+                .unwrap_or_else(|| "client refused workspace edit".into())),
+            Err(e) => Err(e.to_string()),
         }
     }
 }
@@ -440,7 +476,7 @@ fn uri_basename(uri: &Url) -> Option<String> {
     path.file_stem().map(|s| s.to_string_lossy().into_owned())
 }
 
-async fn write_temp(uri: &Url, line: u32, body: &str) -> std::io::Result<PathBuf> {
+async fn temp_response_path(uri: &Url, line: u32) -> std::io::Result<PathBuf> {
     let cache_dir = dirs::cache_dir()
         .unwrap_or_else(std::env::temp_dir)
         .join("zed-http")
@@ -449,8 +485,6 @@ async fn write_temp(uri: &Url, line: u32, body: &str) -> std::io::Result<PathBuf
 
     let base = uri_basename(uri).unwrap_or_else(|| "response".into());
     let ts = chrono::Local::now().format("%Y%m%d-%H%M%S");
-    let path = cache_dir.join(format!("{base}-line{line}-{ts}.http-resp"));
-    tokio::fs::write(&path, body).await?;
-    Ok(path)
+    Ok(cache_dir.join(format!("{base}-line{line}-{ts}.http-resp")))
 }
 
