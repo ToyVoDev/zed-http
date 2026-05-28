@@ -133,14 +133,40 @@ Zed where to find it:
 - Save writes a permanent copy next to the source `.http` file.
 - Hover shows the request's last response status and timing.
 
+## Optional CLI
+
+`httpyac-rs` also ships a `httpyac-rs` binary that mirrors the upstream
+`httpyac` CLI flag-for-flag. In its current state it proxies every command
+through to the npm `httpyac` binary on PATH; native execution is being added
+in phases (see `docs/superpowers/plans/2026-05-28-httpyac-rs-cli.md`).
+
+Install with cargo:
+
+```bash
+cd zed-http
+cargo install --path httpyac-rs --features cli
+```
+
+Use:
+
+```bash
+httpyac-rs send path/to/file.http --line 14
+```
+
 ## Repository layout
 
 ```
 zed-http/
 ├── src/                 wasm extension entry (language-server-command, runnables)
 ├── languages/http/      tree-sitter queries (highlights, injections, outline, runnables)
+├── zed-extension/       extension logic (workspace member)
 ├── http-lsp/            zed-http-lsp binary crate
-├── httpyac-rs/          Rust wrapper around the httpyac CLI
+├── httpyac-rs/          Rust wrapper around the httpyac CLI; also exposes
+│                        a `httpyac-rs` binary (off-by-default `cli` feature)
+│                        that mirrors httpyac's flag surface and proxies
+│                        through to npm `httpyac`. See
+│                        docs/superpowers/plans/2026-05-28-httpyac-rs-cli.md
+│                        for the phased native-port plan.
 ├── patches/             reference patch applied to ToyVoDev/tree-sitter-http
 └── flake.nix            devShell + zed-http-lsp Nix package
 ```
