@@ -93,7 +93,12 @@ impl LanguageServer for Backend {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
-                inlay_hint_provider: Some(OneOf::Left(true)),
+                // CodeLens is what Zed routes through workspace/executeCommand for
+                // clickable inline commands; inlay hint `command` fields are silently
+                // dropped by Zed's lsp_inlay_label_to_project conversion.
+                code_lens_provider: Some(CodeLensOptions {
+                    resolve_provider: Some(false),
+                }),
                 code_action_provider: Some(CodeActionProviderCapability::Options(
                     CodeActionOptions {
                         code_action_kinds: Some(vec![
@@ -148,31 +153,28 @@ impl LanguageServer for Backend {
         self.requests.remove(uri);
     }
 
-    async fn inlay_hint(&self, params: InlayHintParams) -> LspResult<Option<Vec<InlayHint>>> {
+    async fn code_lens(&self, params: CodeLensParams) -> LspResult<Option<Vec<CodeLens>>> {
         let uri = params.text_document.uri;
         let Some(reqs) = self.requests.get(&uri) else {
             return Ok(None);
         };
 
-        let mut hints = Vec::with_capacity(reqs.len() * 4);
+        let mut lenses = Vec::with_capacity(reqs.len() * 4);
         for r in reqs.iter() {
-            let position = Position {
-                line: r.line,
-                character: u32::MAX,
+            let range = Range {
+                start: Position { line: r.line, character: 0 },
+                end: Position { line: r.line, character: 0 },
             };
             let has_cached = self.cache.get(&uri, r.line).is_some();
-            hints.push(InlayHint {
-                position,
-                label: InlayHintLabel::LabelParts(label_parts(&uri, r.line, has_cached)),
-                kind: None,
-                text_edits: None,
-                tooltip: Some(InlayHintTooltip::String(format!("{} {}", r.method, r.url))),
-                padding_left: Some(true),
-                padding_right: None,
-                data: None,
-            });
+
+            lenses.push(lens(range, "▶ Send", CMD_SEND, &uri, r.line));
+            if has_cached {
+                lenses.push(lens(range, "👁 Show", CMD_SHOW, &uri, r.line));
+                lenses.push(lens(range, "◉ Headers", CMD_HEADERS, &uri, r.line));
+            }
+            lenses.push(lens(range, "💾 Save", CMD_SAVE, &uri, r.line));
         }
-        Ok(Some(hints))
+        Ok(Some(lenses))
     }
 
     async fn code_action(
@@ -394,71 +396,15 @@ impl Backend {
     }
 }
 
-fn label_parts(uri: &Url, line: u32, has_cached: bool) -> Vec<InlayHintLabelPart> {
-    let mut parts = vec![
-        sep(),
-        labeled_part(
-            "▶ Send",
-            "Send this HTTP request via httpyac",
-            CMD_SEND,
-            uri,
-            line,
-        ),
-    ];
-    if has_cached {
-        parts.push(sep());
-        parts.push(labeled_part(
-            "👁 Show",
-            "Re-open the last response for this request",
-            CMD_SHOW,
-            uri,
-            line,
-        ));
-        parts.push(sep());
-        parts.push(labeled_part(
-            "◉ Headers",
-            "Show only response headers from the last response",
-            CMD_HEADERS,
-            uri,
-            line,
-        ));
-    }
-    parts.push(sep());
-    parts.push(labeled_part(
-        "💾 Save",
-        "Save the last response to a file next to this .http file",
-        CMD_SAVE,
-        uri,
-        line,
-    ));
-    parts
-}
-
-fn sep() -> InlayHintLabelPart {
-    InlayHintLabelPart {
-        value: " ".into(),
-        tooltip: None,
-        location: None,
-        command: None,
-    }
-}
-
-fn labeled_part(
-    label: &str,
-    tooltip: &str,
-    command: &str,
-    uri: &Url,
-    line: u32,
-) -> InlayHintLabelPart {
-    InlayHintLabelPart {
-        value: label.into(),
-        tooltip: Some(InlayHintLabelPartTooltip::String(tooltip.into())),
-        location: None,
+fn lens(range: Range, title: &str, command: &str, uri: &Url, line: u32) -> CodeLens {
+    CodeLens {
+        range,
         command: Some(Command {
-            title: label.into(),
+            title: title.into(),
             command: command.into(),
             arguments: Some(vec![Value::String(uri.to_string()), Value::from(line)]),
         }),
+        data: None,
     }
 }
 

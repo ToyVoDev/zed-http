@@ -19,9 +19,9 @@ and the httpyac extensions on top of it.
 - Two ways to run requests:
   1. **Runnable tasks** (no LSP needed) — every `### …` request gets a Run
      button via Zed's runnable system; see [Tasks](#tasks) below.
-  2. **LSP-driven inlay hints** — `▶ Send · 👁 Show · 💾 Save · ◉ Headers`
-     buttons rendered inline; hover popups; code actions. Requires the
-     [LSP](#optional-lsp) and httpyac.
+  2. **LSP-driven code lens** — `▶ Send · 👁 Show · 💾 Save · ◉ Headers`
+     buttons rendered above each request line; hover popups; code actions.
+     Requires the [LSP](#optional-lsp) and httpyac.
 
 ## Install (extension)
 
@@ -87,20 +87,24 @@ nix profile install .
 
 This builds the `zed-http-lsp` package defined in `flake.nix`.
 
-### Enable inlay hints in Zed
+### Enable code lens in Zed
 
-The LSP advertises itself automatically, but inlay hints are off by default in
-Zed. Add this to your Zed settings:
+The LSP advertises itself automatically, but **code lens is off by default**
+in Zed. Add this to your Zed settings to see the inline `▶ Send / 👁 Show /
+💾 Save / ◉ Headers` buttons above each request:
 
 ```json
 {
-  "languages": {
-    "http": {
-      "inlay_hints": { "enabled": true }
-    }
+  "editor": {
+    "code_lens": true
   }
 }
 ```
+
+(Code lens is the LSP protocol Zed routes through `workspace/executeCommand`
+for clickable inline commands. Inlay hints look similar but don't fire any
+command when clicked — Zed drops the `command` field on inlay-hint label
+parts.)
 
 If `zed-http-lsp` isn't on `PATH` (or you want to use a custom build), tell
 Zed where to find it:
