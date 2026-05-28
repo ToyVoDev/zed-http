@@ -3,7 +3,7 @@
 
 (
   (request
-    (method) @run
+    method: (method) @run
   ) @http-request
   (#set! tag http-request)
 )

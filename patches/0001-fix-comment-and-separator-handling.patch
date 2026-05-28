@@ -1,0 +1,32 @@
+--- grammar.js.bak	2026-05-28 09:06:52
++++ grammar.js	2026-05-28 09:18:04
+@@ -116,7 +116,7 @@
+                 prec.right(
+                     repeat(
+                         choice(
+-                            alias($._var_comment, $.comment),
++                            $.comment,
+                             field(
+                                 "body",
+                                 choice(
+@@ -286,18 +286,12 @@
+ 
+         raw_body: ($) =>
+             seq(
+-                choice(
+-                    token(prec(1, seq(/.+/, NL))),
+-                    seq(COMMENT_PREFIX, $._not_comment),
+-                ),
++                token(prec(1, seq(/.+/, NL))),
+                 optional($._raw_body),
+             ),
+         _raw_body: ($) =>
+             seq(
+-                choice(
+-                    token(prec(PREC.RAW_BODY, LINE_TAIL)),
+-                    seq(COMMENT_PREFIX, $._not_comment),
+-                ),
++                token(prec(PREC.RAW_BODY, LINE_TAIL)),
+                 optional($._raw_body),
+             ),
+         _not_comment: (_) => token(seq(/[^@]*/, NL)),
