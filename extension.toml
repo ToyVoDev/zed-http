@@ -1,7 +1,7 @@
 id = "http"
 name = "http"
 description = "Highlights .http files"
-version = "0.0.2"
+version = "0.0.3"
 schema_version = 1
 authors = ["tylerhanson921@gmail.com"]
 repository = "https://github.com/tie304/zed-http"
@@ -9,4 +9,4 @@ repository = "https://github.com/tie304/zed-http"
 
 [grammars.http]
 repository = "https://github.com/ToyVoDev/tree-sitter-http"
-commit = "79415568d0ab2c489383bc126442cd1d7cab2ae8"
+commit = "07612be7657611df0ddbefaff0e1f48f6cfd006c"

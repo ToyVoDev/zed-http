@@ -1,6 +1,30 @@
---- grammar.js.bak	2026-05-28 09:06:52
-+++ grammar.js	2026-05-28 09:18:04
-@@ -116,7 +116,7 @@
+diff --git a/grammar.js b/grammar.js
+index 32ef7d0..9605b37 100644
+--- a/grammar.js
++++ b/grammar.js
+@@ -46,12 +46,21 @@ module.exports = grammar({
+             choice(
+                 $._plain_comment,
+                 $._var_comment,
++                $._block_comment,
+             ),
+         _plain_comment: (_) =>
+             seq(
+                 COMMENT_PREFIX,
+                 LINE_TAIL,
+             ),
++        _block_comment: (_) =>
++            token(
++                prec(PREC.COMMENT_PREFIX, seq(
++                    "/*",
++                    /[^*]*\*+([^/*][^*]*\*+)*/,
++                    "/",
++                )),
++            ),
+         _var_comment: ($) =>
+             seq(
+                 COMMENT_PREFIX,
+@@ -116,7 +125,7 @@ module.exports = grammar({
                  prec.right(
                      repeat(
                          choice(
@@ -9,7 +33,7 @@
                              field(
                                  "body",
                                  choice(
-@@ -286,18 +286,12 @@
+@@ -286,18 +295,12 @@ module.exports = grammar({
  
          raw_body: ($) =>
              seq(
