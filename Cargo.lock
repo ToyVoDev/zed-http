@@ -1356,6 +1356,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "zed-http-extension"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "zed_extension_api",
+]
+
+[[package]]
 name = "zed-http-lsp"
 version = "0.1.0"
 dependencies = [
@@ -1388,7 +1396,7 @@ dependencies = [
 name = "zed_http"
 version = "0.1.0"
 dependencies = [
- "serde",
+ "zed-http-extension",
  "zed_extension_api",
 ]
 

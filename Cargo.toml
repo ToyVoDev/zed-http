@@ -1,11 +1,13 @@
 [workspace]
-members = ["http-lsp", "httpyac-rs"]
+members = ["zed-extension", "http-lsp", "httpyac-rs"]
 # Zed invokes `cargo build --target wasm32-wasip2` from this directory; the
 # default-members set keeps that targeting the root extension crate only, so
 # the native http-lsp / httpyac-rs members don't try to cross-compile to wasm.
 default-members = ["."]
 resolver = "2"
 
+# The root crate is the cdylib that Zed loads. It's a thin shim — the actual
+# extension logic lives in the `zed-http-extension` workspace member.
 [package]
 name = "zed_http"
 version = "0.1.0"
@@ -14,12 +16,12 @@ publish = false
 license = "Apache-2.0"
 
 [lib]
-path = "src/http.rs"
+path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
 zed_extension_api = "0.0.6"
+zed-http-extension = { path = "zed-extension" }
 
 [profile.release]
 opt-level = "z"

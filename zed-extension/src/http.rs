@@ -2,7 +2,7 @@ use zed_extension_api::{self as zed, settings::LspSettings};
 
 const LSP_BINARY: &str = "zed-http-lsp";
 
-struct HttpExtension {}
+pub struct HttpExtension {}
 
 impl zed::Extension for HttpExtension {
     fn new() -> Self {
@@ -51,5 +51,3 @@ fn fallback_path() -> Option<String> {
 fn env_home() -> Option<String> {
     std::env::var("HOME").ok()
 }
-
-zed::register_extension!(HttpExtension);
