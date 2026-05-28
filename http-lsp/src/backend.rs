@@ -44,10 +44,13 @@ struct HttpYacSettings {
     path: Option<String>,
 }
 
+#[derive(Clone)]
 pub struct Backend {
+    // Every field here is cheap-clone (Arc / DashMap-via-Arc) so the whole
+    // backend can be cloned into a tokio::spawn for deferred work without
+    // moving any owned state.
     client: Client,
-    documents: DashMap<Url, String>,
-    requests: DashMap<Url, Vec<Request>>,
+    requests: Arc<DashMap<Url, Vec<Request>>>,
     cache: Arc<ResponseCache>,
     config: Arc<tokio::sync::RwLock<Config>>,
 }
@@ -56,8 +59,7 @@ impl Backend {
     pub fn new(client: Client) -> Self {
         Self {
             client,
-            documents: DashMap::new(),
-            requests: DashMap::new(),
+            requests: Arc::new(DashMap::new()),
             cache: Arc::new(ResponseCache::new()),
             config: Arc::new(tokio::sync::RwLock::new(Config::default())),
         }
@@ -130,24 +132,18 @@ impl LanguageServer for Backend {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        let uri = params.text_document.uri;
-        let text = params.text_document.text;
-        self.reindex(&uri, &text);
-        self.documents.insert(uri, text);
+        self.reindex(&params.text_document.uri, &params.text_document.text);
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri;
         if let Some(change) = params.content_changes.into_iter().last() {
             self.reindex(&uri, &change.text);
-            self.documents.insert(uri, change.text);
         }
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
-        let uri = &params.text_document.uri;
-        self.documents.remove(uri);
-        self.requests.remove(uri);
+        self.requests.remove(&params.text_document.uri);
     }
 
     async fn code_lens(&self, params: CodeLensParams) -> LspResult<Option<Vec<CodeLens>>> {
@@ -251,28 +247,40 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        match params.command.as_str() {
-            CMD_SEND => {
-                self.run_send(uri, line).await;
+        // Defer the work to a background task and return Ok(None) immediately.
+        //
+        // When apply_code_action / apply_code_lens in Zed sees a `workspace/
+        // applyEdit` come back during the executeCommand request, it both
+        // (a) emits WorkspaceEditApplied which the editor handles by opening
+        // the new buffer, and (b) stores the same transaction in
+        // last_workspace_edits_by_language_server which apply_code_action
+        // returns to the caller — which then calls open_project_transaction
+        // with the code action's title. Two opens for the same buffer ("LSP
+        // Edit" plus the action title).
+        //
+        // By spawning the actual work, executeCommand returns an empty
+        // transaction, so apply_code_action's open is a no-op, and only the
+        // event-driven open happens.
+        let backend = self.clone();
+        let command = params.command;
+        tokio::spawn(async move {
+            match command.as_str() {
+                CMD_SEND => backend.run_send(uri, line).await,
+                CMD_SHOW => backend.run_show(uri, line, View::Full).await,
+                CMD_HEADERS => backend.run_show(uri, line, View::HeadersOnly).await,
+                CMD_SAVE => backend.run_save(uri, line).await,
+                other => {
+                    backend
+                        .client
+                        .show_message(
+                            MessageType::ERROR,
+                            format!("zed-http: unknown command {other}"),
+                        )
+                        .await;
+                }
             }
-            CMD_SHOW => {
-                self.run_show(uri, line, View::Full).await;
-            }
-            CMD_HEADERS => {
-                self.run_show(uri, line, View::HeadersOnly).await;
-            }
-            CMD_SAVE => {
-                self.run_save(uri, line).await;
-            }
-            other => {
-                self.client
-                    .show_message(
-                        MessageType::ERROR,
-                        format!("zed-http: unknown command {other}"),
-                    )
-                    .await;
-            }
-        }
+        });
+
         Ok(None)
     }
 
