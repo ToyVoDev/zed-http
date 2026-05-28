@@ -54,12 +54,16 @@ extension to your CLI of choice (default example uses `httpyac`):
 ]
 ```
 
+![screenshot with lsp](docs/screenshot-with-tasks.png)
+
 ## Optional LSP
 
 The LSP gives you inline `▶ Send / 👁 Show / 💾 Save / ◉ Headers` buttons on
 every request, plus a hover summary and code actions. It delegates execution
 to httpyac, so variable interpolation, environment files, pre-request scripts,
 assertions, gRPC/WS/etc. all work the same as the CLI does.
+
+![screenshot with lsp](docs/screenshot-with-lsp.png)
 
 ### Prerequisites
 
