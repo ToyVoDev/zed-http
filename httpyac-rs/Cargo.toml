@@ -9,8 +9,23 @@ description = "Rust wrapper around the httpyac CLI for sending .http requests"
 name = "httpyac"
 path = "src/lib.rs"
 
+[[bin]]
+name = "httpyac-rs"
+path = "src/bin/httpyac-rs.rs"
+required-features = ["cli"]
+
+[features]
+default = []
+cli = ["dep:clap", "dep:anyhow"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
-tokio = { version = "1", features = ["process", "fs", "io-util"] }
+tokio = { version = "1", features = ["process", "fs", "io-util", "rt-multi-thread", "macros", "signal"] }
+clap = { version = "4.5", features = ["derive"], optional = true }
+anyhow = { version = "1", optional = true }
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
