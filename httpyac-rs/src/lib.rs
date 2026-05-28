@@ -30,3 +30,6 @@ mod send;
 pub use error::Error;
 pub use exchange::{Exchange, Meta, RequestResult, Response, Summary, Timings};
 pub use send::{send_exchange, SendOptions};
+
+#[cfg(feature = "cli")]
+pub mod cli;
