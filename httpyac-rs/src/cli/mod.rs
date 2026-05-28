@@ -9,6 +9,7 @@
 
 use clap::{Parser, Subcommand};
 
+pub mod oauth2;
 pub mod proxy;
 pub mod send;
 
@@ -31,11 +32,14 @@ pub struct Cli {
 pub enum Command {
     /// Send/execute http files.
     Send(send::SendArgs),
+    /// Generate an OAuth2 token.
+    Oauth2(oauth2::Oauth2Args),
 }
 
 pub async fn run() -> anyhow::Result<i32> {
     let cli = Cli::parse();
     match cli.command {
         Command::Send(args) => args.run().await,
+        Command::Oauth2(args) => args.run().await,
     }
 }
